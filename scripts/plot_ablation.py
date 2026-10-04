@@ -62,7 +62,15 @@ def parse_log(path: Path) -> list[dict]:
     return out
 
 
-def fig_ablation(res: dict, outdir: Path) -> None:
+def fig_ablation(res: dict, outdir: Path, centre_data: dict | None = None) -> None:
+    """2x2 grid plus collapse counts.
+
+    For the two crop-aug arms the centre-crop measurement is preferred, so the
+    figure agrees with the headline table in README 2.1. Where only the
+    random-crop run exists, the label says which view the bar came from -- the two
+    differ by up to 25 points (README 2.2), so a silent mix-up would be misleading.
+    """
+    centre_data = centre_data or {}
     fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11, 4.2),
                                   gridspec_kw={"width_ratios": [1, 1]})
 
@@ -75,11 +83,15 @@ def fig_ablation(res: dict, outdir: Path) -> None:
     cols = {"noaug50": "#9e9e9e", "noaug200": "#d62728",
             "aug50": "#1f77b4", "aug200": "#2ca02c"}
     for k in cells:
-        v = rate(res[k]) * 100
-        s = sum(res[k].values())
+        src, view = res, "random crop"
+        if k in centre_data:
+            src, view = centre_data, "centre crop"
+        v = rate(src[k]) * 100
+        s = sum(src[k].values())
         x = centre[k] + offset[k]
         ax.bar([x], [v], color=cols[k], width=0.34)
-        ax.text(x, v + 2.5, f"{v:.1f}%\n{s}/500", ha="center", fontsize=8.5)
+        ax.text(x, v + 2.5, f"{v:.1f}%\n{s}/500\n({view})", ha="center",
+                fontsize=7.5)
     ax.set_xticks([0, 1]); ax.set_xticklabels(["no crop aug", "crop aug"])
     ax.set_xlim(-0.55, 1.55)
     ax.set_ylim(0, 118)
@@ -89,11 +101,14 @@ def fig_ablation(res: dict, outdir: Path) -> None:
                  fontsize=10)
     ax.grid(alpha=0.3, axis="y")
 
-    # annotate the two marginal effects
-    e50 = rate(res["aug50"]) - rate(res["noaug50"])
-    e200 = rate(res["aug200"]) - rate(res["noaug200"])
+    # annotate the marginal effects, using the same view as the bars
+    def pick(k):
+        return centre_data[k] if k in centre_data else res[k]
+
+    e50 = rate(pick("aug50")) - rate(res["noaug50"])
+    e200 = rate(pick("aug200")) - rate(res["noaug200"])
     a_noaug = rate(res["noaug200"]) - rate(res["noaug50"])
-    a_aug = rate(res["aug200"]) - rate(res["aug50"])
+    a_aug = rate(pick("aug200")) - rate(pick("aug50"))
     ax.text(0.5, 0.995,
             f"crop aug:  +{e50*100:.1f} pts @50ep   +{e200*100:.1f} pts @200ep\n"
             f"epochs:     +{a_noaug*100:.1f} pts (no aug)   +{a_aug*100:.1f} pts (aug)",
@@ -117,6 +132,36 @@ def fig_ablation(res: dict, outdir: Path) -> None:
 
     fig.tight_layout()
     fig.savefig(outdir / "ablation_2x2.png", dpi=150)
+    plt.close(fig)
+
+
+def fig_collapses_centre(res: dict, centre: dict, outdir: Path) -> None:
+    """Collapse counts per policy, as-trained vs centre-crop view.
+
+    Kept separate from fig_ablation because the two panels there serve different
+    purposes: this one exists to make the 8 -> 27 jump unmissable.
+    """
+    keys = [k for k in ("aug50", "aug200") if k in centre]
+    fig, ax = plt.subplots(figsize=(7.2, 4.0))
+    w = 0.35
+    xs = range(len(keys))
+    r = [sum(1 for v in res[k].values() if v == 0) for k in keys]
+    c = [sum(1 for v in centre[k].values() if v == 0) for k in keys]
+    ax.bar([x - w / 2 for x in xs], r, w, label="random crop", color="#ff7f0e")
+    ax.bar([x + w / 2 for x in xs], c, w, label="centre crop", color="#1f77b4")
+    for x, a, b in zip(xs, r, c):
+        ax.text(x - w / 2, a + 0.4, str(a), ha="center", fontsize=10)
+        ax.text(x + w / 2, b + 0.4, str(b), ha="center", fontsize=10)
+    ax.set_xticks(list(xs))
+    ax.set_xticklabels(["BC-RNN 50ep", "BC-RNN 200ep"])
+    ax.set_ylabel("init-states at 0/10")
+    ax.set_ylim(0, 32)
+    ax.set_title("Collapse is view-dependent for the undertrained arm only\n"
+                 "50ep: 8 -> 27 collapsed.  200ep: 0 -> 1.", fontsize=10)
+    ax.legend(fontsize=9)
+    ax.grid(alpha=0.3, axis="y")
+    fig.tight_layout()
+    fig.savefig(outdir / "collapses_by_view.png", dpi=150)
     plt.close(fig)
 
 
@@ -258,12 +303,6 @@ def main() -> None:
     if not res:
         raise SystemExit("no result CSVs found")
 
-    fig_ablation(res, a.outdir)
-    fig_per_state(res, a.outdir)
-    print(f"ablation_2x2.png            {len(res)} policies")
-    print(f"per_init_state_all_runs.png {len(res)} policies")
-
-    # centre-crop re-evaluation of the two crop-aug arms
     centre = {}
     for key, _lab, csvname in CENTER_ARMS:
         f = REPO / "results" / csvname
@@ -271,9 +310,18 @@ def main() -> None:
             centre[key] = load(f)
         else:
             print(f"skip {key} centre: missing {f}")
+
+    fig_ablation(res, a.outdir, centre_data=centre)
+    fig_per_state(res, a.outdir)
+    print(f"ablation_2x2.png            {len(res)} policies"
+          + (f" (aug arms shown under centre crop)" if centre else ""))
+    print(f"per_init_state_all_runs.png {len(res)} policies")
+
     if centre:
         fig_center_effect(res, centre, a.outdir)
+        fig_collapses_centre(res, centre, a.outdir)
         print(f"test_randomizer_effect.png  {len(centre)} arms")
+        print(f"collapses_by_view.png       {len(centre)} arms")
         print("\n=== 复核：随机裁剪 vs 中心裁剪 ===")
         for key in centre:
             sr = sum(res[key].values())

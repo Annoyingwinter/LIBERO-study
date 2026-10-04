@@ -103,6 +103,8 @@ difference is which 76×76 window the policy sees.
 
 ![test-time crop effect](media/figures/test_randomizer_effect.png)
 
+![collapse counts by view](media/figures/collapses_by_view.png)
+
 Two conclusions, and the first one corrected a wrong assumption of mine:
 
 1. **The 87.8% is real.** I had expected the score to collapse toward the no-aug
@@ -121,9 +123,10 @@ substantially borrowed from test-time input variability, and the borrow disappea
 as training converges.** I would not have detected this without deliberately
 breaking a component of my own evaluation.
 
-### 2.2 What augmentation actually buys: the floor, not the ceiling
+### 2.3 Where the augmentation gain sits, by init-state
 
-Breaking the 35.8-point aug gain at 200 epochs down by init-state:
+Breaking the 35.8-point aug gain at 200 epochs down by init-state (random-crop
+view, the only one where both arms are directly comparable):
 
 | group | no aug | crop aug | episodes gained | share of the 35.8 |
 |---|---|---|---|---|
@@ -144,7 +147,7 @@ with **zero** collapsed init-states.
 
 ![per-init-state](media/figures/per_init_state_all_runs.png)
 
-### 2.3 Training dynamics — the part I did not expect
+### 2.4 Training dynamics — the part I did not expect
 
 ![log curves](media/figures/train_log_curves_all.png)
 
@@ -174,7 +177,7 @@ I am not stating a general rule: *within* the no-aug family, higher loss goes wi
 higher closed-loop score (13.0% → 52.0% as loss goes 21.9 → 30.3); *across*
 families, the lower-loss run has the higher score. Both are in the table above.
 
-### 2.4 ACT vs BC-RNN
+### 2.5 ACT vs BC-RNN
 
 ACT is **8.2 points ahead** (96.0% vs 87.8%) at the same 500-episode protocol, and
 the failure structure differs — see §4. Two caveats: ACT has 84M parameters vs
@@ -187,7 +190,7 @@ I could not find an intermediate value (5/10, 8/10) anywhere in its CSV. That is
 consistent with a systematic failure mode rather than stochastic noise, but I have
 not verified it (§8).
 
-### 2.5 Rollout clips
+### 2.6 Rollout clips
 
 `media/rollouts/` is **intentionally empty**. 89 clips exist in the working
 directory but none are published: the directory was written by more than one run,
@@ -320,6 +323,8 @@ docs/notes/                     dated lab notes, chronological, unedited
 results/                        every measured CSV + a README on what is missing
 logs/                           BC-RNN training logs (text), ACT log (csv)
 media/figures/                  six figures, all generated from committed logs
+                                (2x2, per-init-state, log curves, ACT curve,
+                                test-time-crop effect, collapse counts)
 media/rollouts/                 empty on purpose, see the README there
 env/requirements.txt            pinned environment
 ```
