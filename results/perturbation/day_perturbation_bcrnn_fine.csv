@@ -1,0 +1,4 @@
+model,offset_mm,success,episodes,rate
+bcrnn,12.5,8,10,0.8
+bcrnn,15.0,0,10,0.0
+bcrnn,17.5,8,10,0.8

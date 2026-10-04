@@ -1,0 +1,7 @@
+model,offset_mm,success,episodes,rate
+act,0.0,10,10,1.0
+act,10.0,10,10,1.0
+act,20.0,0,10,0.0
+act,30.0,0,10,0.0
+act,40.0,0,10,0.0
+act,50.0,0,10,0.0
